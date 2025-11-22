@@ -1,6 +1,6 @@
 <img src="logoExcaliDash.png" alt="[Image Description]" width="80" height="88">
 
-# ExcaliDash
+# ExcaliDash v0.1.0
 
 A beautiful, self hosted dashboard and organizer for [Excalidraw](https://github.com/excalidraw/excalidraw) with live collaboration.
 ![](dashboard.png)
