@@ -66,7 +66,7 @@ A self-hosted dashboard and organizer for [Excalidraw](https://github.com/excali
 # Installation
 
 > [!CAUTION]
-> NOT for production use. This is just a side project (and also the first release), and it likely contains some bugs.
+> NOT for production use. This is just a side project (and also the first release), and it likely contains some bugs. DO NOT open ports to the internet (e.g. CORS is set to allow all)
 
 ## Docker Hub (Recommended)
 
