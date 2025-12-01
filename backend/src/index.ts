@@ -112,12 +112,18 @@ const io = new Server(httpServer, {
   maxHttpBufferSize: 1e8, // 100 MB
 });
 const prisma = new PrismaClient();
-const parseJsonField = <T>(rawValue: string | null | undefined, fallback: T): T => {
+const parseJsonField = <T>(
+  rawValue: string | null | undefined,
+  fallback: T
+): T => {
   if (!rawValue) return fallback;
   try {
     return JSON.parse(rawValue) as T;
   } catch (error) {
-    console.warn("Failed to parse JSON field", { error, valuePreview: rawValue.slice(0, 50) });
+    console.warn("Failed to parse JSON field", {
+      error,
+      valuePreview: rawValue.slice(0, 50),
+    });
     return fallback;
   }
 };
@@ -132,6 +138,11 @@ const DRAWINGS_CACHE_TTL_MS = (() => {
 type DrawingsCacheEntry = { body: Buffer; expiresAt: number };
 const drawingsCache = new Map<string, DrawingsCacheEntry>();
 
+/**
+ * Builds a cache key for the drawings list endpoint.
+ * NOTE: This key does NOT include sort order. If sorting options are added
+ * to the endpoint in the future, they must be included in this key.
+ */
 const buildDrawingsCacheKey = (keyParts: {
   searchTerm: string;
   collectionFilter: string;
@@ -798,7 +809,7 @@ app.put("/drawings/:id", async (req, res) => {
       where: { id },
       data,
     });
-    await invalidateDrawingsCache();
+    invalidateDrawingsCache();
 
     console.log("[API] Update complete", {
       id,
@@ -927,7 +938,7 @@ app.delete("/collections/:id", async (req, res) => {
         where: { id },
       }),
     ]);
-    await invalidateDrawingsCache();
+    invalidateDrawingsCache();
 
     res.json({ success: true });
   } catch (error) {

@@ -58,6 +58,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
   const [previewSvg, setPreviewSvg] = useState<string | null>(drawing.preview ?? null);
   const [contextMenu, setContextMenu] = useState<{ x: number; y: number } | null>(null);
   const [isExporting, setIsExporting] = useState(false);
+  const [exportError, setExportError] = useState<string | null>(null);
   const [fullData, setFullData] = useState<HydratedDrawingData | null>(null);
 
   const fullDataRef = React.useRef(fullData);
@@ -69,14 +70,18 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
     fullDataPromiseRef.current = null;
   }, [drawing.id]);
 
-  const ensureFullData = useCallback(async () => {
+  const drawingIdRef = React.useRef(drawing.id);
+  drawingIdRef.current = drawing.id;
+
+  const ensureFullData = useCallback(async (): Promise<HydratedDrawingData> => {
     if (fullDataRef.current) {
       return fullDataRef.current;
     }
     if (fullDataPromiseRef.current) {
       return fullDataPromiseRef.current;
     }
-    const promise = api.getDrawing(drawing.id).then((fullDrawing) => {
+    const currentDrawingId = drawingIdRef.current;
+    const promise = api.getDrawing(currentDrawingId).then((fullDrawing) => {
       const payload: HydratedDrawingData = {
         elements: fullDrawing.elements || [],
         appState: fullDrawing.appState || {},
@@ -91,7 +96,7 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
     });
     fullDataPromiseRef.current = promise;
     return promise;
-  }, [drawing.id]);
+  }, []); // Stable identity - uses refs internally
 
   useEffect(() => {
     let cancelled = false;
@@ -136,11 +141,13 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
     return () => {
       cancelled = true;
     };
-  }, [drawing.id, drawing.preview, ensureFullData, onPreviewGenerated]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [drawing.id, drawing.preview, onPreviewGenerated]); // ensureFullData has stable identity via refs
 
   const handleExport = useCallback(async () => {
     try {
       setIsExporting(true);
+      setExportError(null);
       const data = await ensureFullData();
       const drawingPayload: Drawing = {
         ...drawing,
@@ -151,6 +158,9 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
       exportDrawingToFile(drawingPayload);
     } catch (error) {
       console.error("Failed to export drawing", error);
+      setExportError("Failed to export drawing. Please try again.");
+      // Clear error after 3 seconds
+      setTimeout(() => setExportError(null), 3000);
     } finally {
       setIsExporting(false);
     }
@@ -409,6 +419,11 @@ export const DrawingCard: React.FC<DrawingCardProps> = ({
                 {isExporting ? <Loader2 size={14} className="animate-spin" /> : <Download size={14} />}
                 {isExporting ? 'Exporting...' : 'Export'}
               </button>
+              {exportError && (
+                <div className="px-3 py-2 text-xs text-rose-600 dark:text-rose-400 bg-rose-50 dark:bg-rose-900/20">
+                  {exportError}
+                </div>
+              )}
 
               <div className="border-t border-slate-50 dark:border-slate-700 my-1"></div>
 
