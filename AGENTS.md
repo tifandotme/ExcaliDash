@@ -4,6 +4,24 @@
 
 ExcaliDash is a full-stack dashboard application for managing and organizing [Excalidraw](https://excalidraw.com) drawings. It provides a interface for creating, organizing, and collaborating on diagrams with features like collections, real-time collaboration, file import/export, and bulk operations.
 
+## Custom Configuration
+
+This fork includes infrastructure and deployment tooling:
+
+Files added:
+
+- .github/workflows/deploy.yml (CI/CD pipeline)
+- .env (Encrypted by dotenvx)
+- .kamal/ (Deployment configuration)
+
+Files modified:
+
+- config/deploy.yml (Kamal deployment config)
+
+## Agent Instructions
+
+Before each conversation, ensure you have read the custom configuration files listed above if not already provided as context.
+
 ## Project Overview
 
 ### Core Features
@@ -170,13 +188,11 @@ VITE_API_URL=http://localhost:8000
    ```
 
 2. **Make Your Changes**
-
    - Follow the existing code style and patterns
    - Add TypeScript types for new features
    - Update database schema if needed (see Database section)
 
 3. **Test Your Changes**
-
    - Test both locally and with Docker
    - Check that existing functionality still works
 
@@ -327,23 +343,19 @@ npx prisma migrate deploy
 ### Common Issues
 
 1. **Database Connection Error**
-
    - Check that the database file exists in `backend/prisma/dev.db`
    - Ensure proper permissions on the database file
    - Verify DATABASE_URL in .env
 
 2. **Prisma Client Issues**
-
    - Run `npx prisma generate` to regenerate client
    - Clear `node_modules` and reinstall dependencies
 
 3. **Port Already in Use**
-
    - Change PORT in backend/.env
    - Update frontend API URL accordingly
 
 4. **Docker Build Failures**
-
    - Check Dockerfile syntax
    - Ensure all dependencies are listed in package.json
    - Verify build context in docker-compose.yml
