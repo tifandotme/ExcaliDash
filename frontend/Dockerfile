@@ -25,6 +25,8 @@ RUN npm run build
 # Production stage
 FROM nginx:alpine
 
+LABEL service=excalidash
+
 # Install envsubst (gettext) so we can template nginx config at runtime
 RUN apk add --no-cache gettext
 

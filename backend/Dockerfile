@@ -25,6 +25,8 @@ RUN npx tsc
 # Production stage
 FROM node:20-alpine
 
+LABEL service=excalidash-backend
+
 # Install OpenSSL for Prisma and su-exec, create non-root user
 RUN apk add --no-cache openssl su-exec && \
     addgroup -g 1001 -S nodejs && \

@@ -1,0 +1,138 @@
+name: Deploy
+
+on:
+  workflow_dispatch:
+    inputs:
+      new_cert:
+        description: "Generate new certificate"
+        required: false
+        default: false
+        type: boolean
+
+jobs:
+  build-and-push:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      version: ${{ steps.version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - uses: docker/setup-buildx-action@8d2750c68a42422c14e847fe6c8ac0403b4cbd6f # v3.12.0
+
+      - uses: docker/login-action@5e57cd118135c172c3672efd75eb46360885c0ef # v3.6.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Read VERSION file
+        id: version
+        run: echo "version=$(cat VERSION)" >> $GITHUB_OUTPUT
+
+      - uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: ./backend
+          file: ./backend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/tifandotme/excalidash-backend:latest
+            ghcr.io/tifandotme/excalidash-backend:${{ steps.version.outputs.version }}
+            ghcr.io/tifandotme/excalidash-backend:${{ github.sha }}
+          cache-from: type=gha,scope=backend
+          cache-to: type=gha,mode=max,scope=backend
+
+      - name: Build and push frontend image
+        uses: docker/build-push-action@263435318d21b8e681c14492fe198d362a7d2c83 # v6.18.0
+        with:
+          context: .
+          file: ./frontend/Dockerfile
+          push: true
+          tags: |
+            ghcr.io/tifandotme/excalidash-frontend:latest
+            ghcr.io/tifandotme/excalidash-frontend:${{ steps.version.outputs.version }}
+            ghcr.io/tifandotme/excalidash-frontend:${{ github.sha }}
+          cache-from: type=gha,scope=frontend
+          cache-to: type=gha,mode=max,scope=frontend
+          build-args: |
+            VITE_APP_VERSION=${{ steps.version.outputs.version }}
+            VITE_APP_BUILD_LABEL=github-actions
+
+  deploy:
+    needs: build-and-push
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DOTENV_PRIVATE_KEY: ${{ secrets.DOTENV_PRIVATE_KEY }}
+
+    steps:
+      - uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - run: curl -sfS https://dotenvx.sh/install.sh | sh
+
+      - uses: tailscale/github-action@53acf823325fe9ca47f4cdaa951f90b4b0de5bb9 # v4.1.1
+        with:
+          oauth-client-id: ${{ secrets.TS_OAUTH_CLIENT_ID }}
+          oauth-secret: ${{ secrets.TS_OAUTH_SECRET }}
+          tags: tag:ci
+          version: latest
+          ping: box.javanese-pound.ts.net
+
+      - name: Download existing certificate
+        if: ${{ !inputs.new_cert }}
+        run: |
+          mkdir -p ~/.ssh
+          ssh-keyscan box.javanese-pound.ts.net >> ~/.ssh/known_hosts 2>/dev/null || true
+          chmod 700 ~/.ssh
+
+          mkdir -p ./letsencrypt/live/excalidash.tifan.me
+          scp -r eddies@box.javanese-pound.ts.net:/home/eddies/.kamal/proxy/apps-config/excalidash/tls/web/cert.pem ./letsencrypt/live/excalidash.tifan.me/fullchain.pem
+          scp -r eddies@box.javanese-pound.ts.net:/home/eddies/.kamal/proxy/apps-config/excalidash/tls/web/key.pem ./letsencrypt/live/excalidash.tifan.me/privkey.pem
+
+      - name: Generate new certificate
+        if: ${{ inputs.new_cert }}
+        run: |
+          mkdir -p ./certbot
+          cat <<EOF > ./certbot/cloudflare.ini
+          dns_cloudflare_api_token = $(dotenvx get CLOUDFLARE_API_TOKEN)
+          EOF
+          chmod 600 ./certbot/cloudflare.ini
+
+          docker run --rm \
+            -v $(pwd)/letsencrypt:/etc/letsencrypt \
+            -v $(pwd)/letsencrypt-logs:/var/log/letsencrypt \
+            -v $(pwd)/certbot/cloudflare.ini:/root/.config/certbot/cloudflare.ini \
+            certbot/dns-cloudflare \
+            certonly \
+            --dns-cloudflare \
+            --dns-cloudflare-credentials /root/.config/certbot/cloudflare.ini \
+            --dns-cloudflare-propagation-seconds 20 \
+            --non-interactive \
+            --agree-tos \
+            --email tifan@proton.me \
+            -d excalidash.tifan.me
+
+          sudo chown -R $USER letsencrypt
+
+      - uses: actions/upload-artifact@b7c566a772e6b6bfb58ed0dc250532a479d7789f # v6.0.0
+        with:
+          name: ssl-certificates
+          path: letsencrypt/
+
+      - uses: ruby/setup-ruby@4c24fa5ec04b2e79eb40571b1cee2a0d2b705771 # v1.278.0
+        with:
+          ruby-version: "4"
+          bundler-cache: false
+      - run: gem install kamal --no-document
+
+      - name: Deploy with Kamal
+        run: |
+          export SSL_CERTIFICATE_PEM="$(cat letsencrypt/live/excalidash.tifan.me/fullchain.pem)"
+          export SSL_PRIVATE_KEY_PEM="$(cat letsencrypt/live/excalidash.tifan.me/privkey.pem)"
+
+          dotenvx run -- kamal accessory reboot backend --verbose
+          dotenvx run -- kamal deploy --skip-push --verbose --version ${{ needs.build-and-push.outputs.version }}
